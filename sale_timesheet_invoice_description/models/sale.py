@@ -4,6 +4,10 @@
 
 from openerp import api, fields, models, _
 from openerp.tools import config
+import time
+
+import logging
+_logger = logging.getLogger(__name__)
 
 
 class SaleOrder(models.Model):
@@ -30,10 +34,14 @@ class SaleOrderLine(models.Model):
     def _prepare_invoice_line_details(self, line, desc_rule):
         details = []
         if desc_rule[0] == '1':
-            details.append(line.date)
+            user_lang = self.env['res.lang'].search([('code','=', self.env.user.lang)], limit=1)
+            date_format = user_lang[0] and user_lang[0].date_format or '%Y-%m-%d'
+            details.append(time.strftime(date_format, time.strptime(line.date, '%Y-%m-%d')))
         if desc_rule[1] == '1':
-            details.append(
-                "%s %s" % (line.unit_amount, line.product_uom_id.name))
+            if self.env.ref('product.product_uom_hour').id == line.product_uom_id.id:
+                details.append('{0:02.0f}:{1:02.0f}'.format(*divmod(line.unit_amount * 60, 60)))
+            else:
+                details.append("%s %s" % (line.unit_amount, line.product_uom_id.name))
         if desc_rule[2] == '1':
             details.append(line.name)
         return details
@@ -49,15 +57,11 @@ class SaleOrderLine(models.Model):
         last_invoice = self.invoice_lines.sorted(lambda x: x.create_date)[-1:]
         if last_invoice:
             domain.append(('create_date', '>', last_invoice.create_date))
-        for line in self.env['account.analytic.line'].search(
-                domain, order='date, id'):
+        for line in self.env['account.analytic.line'].search(domain, order='date, id'):
             details = self._prepare_invoice_line_details(line, desc_rule)
-            note.append(
-                u' - '.join(map(lambda x: unicode(x) or '', details)))
+            note.append(u' - '.join(map(lambda x: unicode(x) or '', details)))
         # This is for not breaking possible tests that expects to create the
         # invoices lines the standard way
-        if note and (not config['test_enable'] or self.env.context.get(
-                'timesheet_description')):
-            res['name'] += "\n" + (
-                "\n".join(map(lambda x: unicode(x) or '', note)))
+        if note and (not config['test_enable'] or self.env.context.get('timesheet_description')):
+            res['name'] += "\n" + ("\n".join(map(lambda x: unicode(x) or '', note)))
         return res

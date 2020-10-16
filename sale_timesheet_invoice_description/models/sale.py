@@ -53,7 +53,7 @@ class SaleOrderLine(models.Model):
         if not desc_rule or desc_rule == '000':
             return res
         note = []
-        domain = [('so_line', '=', self.id)]
+        domain = [('so_line', '=', self.id), ('is_timesheet', '=', True)]
         last_invoice = self.invoice_lines.sorted(lambda x: x.create_date)[-1:]
         if last_invoice:
             domain.append(('create_date', '>', last_invoice.create_date))
